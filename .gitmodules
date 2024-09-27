@@ -1,0 +1,3 @@
+[submodule "libiconv"]
+	path = libiconv
+	url = https://github.com/roboticslibrary/libiconv.git
