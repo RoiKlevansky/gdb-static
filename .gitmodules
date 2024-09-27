@@ -7,3 +7,6 @@
 [submodule "mpfr"]
 	path = mpfr
 	url = https://gitlab.inria.fr/mpfr/mpfr.git
+[submodule "gmp-6.3"]
+	path = gmp-6.3
+	url = https://github.com/gmp-mirror/gmp-6.3.git
