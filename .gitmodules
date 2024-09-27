@@ -4,3 +4,6 @@
 [submodule "binutils-gdb"]
 	path = binutils-gdb
 	url = https://sourceware.org/git/binutils-gdb.git
+[submodule "mpfr"]
+	path = mpfr
+	url = https://gitlab.inria.fr/mpfr/mpfr.git
