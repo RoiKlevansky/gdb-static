@@ -1,3 +1,6 @@
 [submodule "libiconv"]
 	path = libiconv
 	url = https://github.com/roboticslibrary/libiconv.git
+[submodule "binutils-gdb"]
+	path = binutils-gdb
+	url = https://sourceware.org/git/binutils-gdb.git
