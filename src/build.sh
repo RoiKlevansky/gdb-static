@@ -24,18 +24,22 @@ function set_compliation_variables() {
     if [[ "$target_arch" == "arm" ]]; then
         export CC=arm-linux-gnueabi-gcc
         export CXX=arm-linux-gnueabi-g++
+        export STRIP=arm-linux-gnueabi-strip
         export HOST=arm-linux-gnueabi
     elif [[ "$target_arch" == "aarch64" ]]; then
         export CC=aarch64-linux-gnu-gcc
         export CXX=aarch64-linux-gnu-g++
+        export STRIP=aarch64-linux-gnu-strip
         export HOST=aarch64-linux-gnu
     elif [[ "$target_arch" == "powerpc" ]]; then
         export CC=powerpc-linux-gnu-gcc
         export CXX=powerpc-linux-gnu-g++
+        export STRIP=powerpc-linux-gnu-strip
         export HOST=powerpc-linux-gnu
     elif [[ "$target_arch" == "x86_64" ]]; then
         export CC=gcc
         export CXX=g++
+        export STRIP=strip
         export HOST=x86_64-linux-gnu
     fi
 }
@@ -254,6 +258,9 @@ function build_gdb() {
     if [[ $? -ne 0 ]]; then
         return 1
     fi
+
+    "$STRIP" ./gdb/gdb
+    "$STRIP" ./gdbserver/gdbserver
 
     popd > /dev/null
 }
