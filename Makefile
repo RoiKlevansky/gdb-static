@@ -35,6 +35,11 @@ build/build-docker-image.stamp: Dockerfile
 
 build-docker-image: build/build-docker-image.stamp
 
+build/gdb-static-docker-image.tar: build/build-docker-image.stamp
+	docker save -o build/gdb-static-docker-image.tar gdb-static
+
+save-docker-image: build/gdb-static-docker-image.tar
+
 build/download-packages.stamp: build/build-docker-image.stamp src/compilation/download_packages.sh
 	mkdir -p $(BUILD_PACKAGES_DIR)
 	docker run --user $(shell id -u):$(shell id -g) \
