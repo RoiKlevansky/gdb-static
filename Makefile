@@ -1,17 +1,27 @@
 ARCHS := x86_64 arm aarch64 powerpc mips mipsel
+
 TARGETS := $(addprefix build-, $(ARCHS))
+COMMON_TARGETS := $(addprefix build-common-, $(ARCHS))
+PYTHON_TARGETS := $(addprefix build-with-python-, $(ARCHS))
+ALL_TARGETS := $(TARGETS) $(PYTHON_TARGETS)
+
 PACK_TARGETS := $(addprefix pack-, $(ARCHS))
+PYTHON_PACK_TARGETS := $(addprefix pack-with-python-, $(ARCHS))
+ALL_PACK_TARGETS := $(PACK_TARGETS) $(PYTHON_PACK_TARGETS)
+
 SUBMODULE_PACKAGES := $(wildcard src/submodule_packages/*)
 BUILD_PACKAGES_DIR := "build/packages"
 
-.PHONY: clean help download_packages build build-docker-image $(TARGETS) $(PACK_TARGETS)
+.PHONY: clean help download_packages build build-docker-image $(ALL_TARGETS) $(ALL_PACK_TARGETS)
+
+.NOTPARALLEL: build pack
 
 help:
 	@echo "Usage:"
 	@echo "  make build"
 	@echo ""
 
-	@for target in $(TARGETS); do \
+	@for target in $(ALL_TARGETS); do \
 		echo "  $$target"; \
 	done
 
@@ -20,10 +30,15 @@ help:
 
 build/build-docker-image.stamp: Dockerfile
 	mkdir -p build
-	docker build -t gdb-static .
+	docker buildx build --tag gdb-static .
 	touch build/build-docker-image.stamp
 
 build-docker-image: build/build-docker-image.stamp
+
+build/gdb-static-docker-image.tar: build/build-docker-image.stamp
+	docker save -o build/gdb-static-docker-image.tar gdb-static
+
+save-docker-image: build/gdb-static-docker-image.tar
 
 build/download-packages.stamp: build/build-docker-image.stamp src/compilation/download_packages.sh
 	mkdir -p $(BUILD_PACKAGES_DIR)
@@ -40,19 +55,34 @@ symlink-git-packages: build/symlink-git-packages.stamp
 
 download-packages: build/download-packages.stamp
 
-build: $(TARGETS)
+build: $(ALL_TARGETS)
 
-$(TARGETS): build-%: symlink-git-packages download-packages build-docker-image
+$(TARGETS): build-%:
+	@$(MAKE) _build-$*
+
+$(PYTHON_TARGETS): build-with-python-%:
+	@EXTRA_ARGS="--with-python" $(MAKE) _build-$*
+
+$(COMMON_TARGETS): build-common-%:
+	@EXTRA_ARGS="--common-only" $(MAKE) _build-$*
+
+_build-%: symlink-git-packages download-packages build-docker-image
 	mkdir -p build
 	docker run --user $(shell id -u):$(shell id -g) \
 		--rm --volume .:/app/gdb gdb-static env TERM=xterm-256color \
-		/app/gdb/src/compilation/build.sh $* /app/gdb/build/ /app/gdb/src
+		/app/gdb/src/compilation/build.sh $* /app/gdb/build/ /app/gdb/src $(EXTRA_ARGS)
 
-pack: $(PACK_TARGETS)
+pack: $(ALL_PACK_TARGETS)
 
-$(PACK_TARGETS): pack-%: build-%
-	if [ ! -f "build/artifacts/gdb-static-$*.tar.gz" ]; then \
-		tar -czf "build/artifacts/gdb-static-$*.tar.gz" -C "build/artifacts/$*" .; \
+$(PACK_TARGETS): pack-%:
+	@$(MAKE) _pack-$*
+
+$(PYTHON_PACK_TARGETS): pack-with-python-%:
+	@TAR_EXT="with-python-" ARTIFACT_EXT="_with_python" $(MAKE) _pack-$*
+
+_pack-%: build-%
+	if [ ! -f "build/artifacts/gdb-static-$(TAR_EXT)$*.tar.gz" ]; then \
+		tar -czf "build/artifacts/gdb-static-$(TAR_EXT)$*.tar.gz" -C "build/artifacts/$*$(ARTIFACT_EXT)" .; \
 	fi
 
 clean-git-packages:

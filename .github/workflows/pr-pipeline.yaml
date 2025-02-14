@@ -6,9 +6,28 @@ on:
       - '*'
 
 jobs:
+  build_docker_image:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build docker image
+      run: make build-docker-image
+
+    - name: Save docker image
+      run: make save-docker-image
+
+    - name: Upload docker image
+      uses: actions/upload-artifact@v4
+      with:
+        name: gdb-static-docker-image
+        path: build/gdb-static-docker-image.tar
+
   build:
+    needs: build_docker_image
     strategy:
       matrix:
+        build_type: ["build", "build-with-python"]
         architecture: ["x86_64", "arm", "aarch64", "powerpc", "mips", "mipsel"]
 
     runs-on: ubuntu-latest
@@ -20,5 +39,19 @@ jobs:
     - name: Install dependencies
       run: sudo apt-get install -y wget
 
+    - name: Download docker image
+      uses: actions/download-artifact@v4
+      with:
+        name: gdb-static-docker-image
+
+    - name: Load docker image
+      run: docker load -i build/gdb-static-docker-image.tar
+
+    - name: Download packages
+      run: make download-packages
+
+    - name: Build GDB dependencies
+      run: make build-common-${{ matrix.architecture }} -j$((`nproc`+1))
+
     - name: Build
-      run: make build-${{ matrix.architecture }} -j$((`nproc`+1))
+      run: make ${{ matrix.build_type }}-${{ matrix.architecture }} -j$((`nproc`+1))

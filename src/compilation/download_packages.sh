@@ -64,11 +64,6 @@ function download_package() {
     local url="$1"
     local output="$2"
 
-    if [[ -f "$output" ]]; then
-        >&2 echo "Skipping download: $output already exists"
-        return 0
-    fi
-
     wget "$url" -O "$output"
     if [[ $? -ne 0 ]]; then
         >&2 echo "Error: failed to download $url"
@@ -98,11 +93,6 @@ function extract_package() {
         return 1
     fi
 
-    if [[ -d "$output_dir" ]]; then
-        >&2 echo "Skipping extraction: $output_dir already exists"
-        return 0
-    fi
-
     pushd "$temp_dir" > /dev/null
 
     unpack_tarball "$tarball_realpath"
@@ -112,6 +102,10 @@ function extract_package() {
     fi
 
     popd > /dev/null
+
+    # Make sure output dir is empty, so we could move content into it.
+    # The directory might not exist, so we need to pass || true so that set -e won't fail us.
+    rm -rf "$output_dir" || true
 
     mv "$temp_dir/$package_dir" "$output_dir"
     if [[ $? -ne 0 ]]; then

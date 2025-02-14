@@ -6,3 +6,9 @@
 	path = src/submodule_packages/binutils-gdb
 	url = git@github.com:guyush1/binutils-gdb.git
 	branch = gdb-static
+[submodule "src/submodule_packages/pygments"]
+	path = src/submodule_packages/pygments
+	url = git@github.com:pygments/pygments.git
+[submodule "src/submodule_packages/libexpat"]
+	path = src/submodule_packages/libexpat
+	url = git@github.com:guyush1/libexpat.git
