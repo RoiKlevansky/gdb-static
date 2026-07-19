@@ -8,13 +8,14 @@ on:
     tags:
       - 'v*'
 
+# Requires repo secret CACHIX_AUTH_TOKEN (a write token for the "gdb-static"
+# Cachix cache). The first run populates the cache with the cross toolchains;
+# every later run fetches them instead of rebuilding gcc/musl from source.
 jobs:
   build:
-    env:
-      TTY_ARG: "" # Disable interactive build mode in cicd since it does not contain a tty device.
-
     strategy:
-      matrix: &matrix_config
+      fail-fast: false
+      matrix:
         build_type: ["slim", "full"]
         architecture: ["x86_64", "arm", "aarch64", "powerpc", "mips", "mipsel"]
 
@@ -24,81 +25,41 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install dependencies
-      run: sudo apt-get install -y wget
+    - uses: cachix/install-nix-action@v30
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+          accept-flake-config = true
+
+    - uses: cachix/cachix-action@v15
+      with:
+        name: gdb-static
+        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
     - name: Build
-      run: make build-${{ matrix.architecture }}-${{ matrix.build_type }} -j$(nproc)
+      run: |
+        nix build -L -o result-gdb \
+          '.?submodules=1#gdb-static-${{ matrix.architecture }}-${{ matrix.build_type }}'
+
+    - name: Test
+      run: |
+        nix build -L -o result-check \
+          '.?submodules=1#checks.x86_64-linux.gdb-static-${{ matrix.architecture }}-${{ matrix.build_type }}'
 
     - name: Pack
-      run: make pack-${{ matrix.architecture }}-${{ matrix.build_type }}
+      run: |
+        tar -czf "gdb-static-${{ matrix.build_type }}-${{ matrix.architecture }}.tar.gz" \
+          -C result-gdb/bin .
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: gdb-static-${{ matrix.architecture }}-${{ matrix.build_type }}
-        path: build/artifacts/gdb-static*.tar.gz
+        path: gdb-static-*.tar.gz
         if-no-files-found: error
 
-  test:
-    needs: build
-    strategy:
-      matrix: *matrix_config
-
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        pip install pytest
-        if [ "${{ matrix.architecture }}" != "x86_64" ]; then
-          sudo apt-get install -y qemu-user
-        fi
-        case "${{ matrix.architecture }}" in
-          x86_64)
-            sudo apt-get install -y g++
-            ;;
-          aarch64)
-            sudo apt-get install -y g++-aarch64-linux-gnu
-            ;;
-          arm)
-            sudo apt-get install -y g++-arm-linux-gnueabi
-            ;;
-          powerpc)
-            sudo apt-get install -y g++-powerpc-linux-gnu
-            ;;
-          mips)
-            sudo apt-get install -y g++-mips-linux-gnu
-            ;;
-          mipsel)
-            sudo apt-get install -y g++-mipsel-linux-gnu
-            ;;
-          *)
-            echo "Unsupported architecture: ${{ matrix.architecture }}"
-            exit 1
-            ;;
-        esac
-
-    - name: Download artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: gdb-static-${{ matrix.architecture }}-${{ matrix.build_type }}
-        path: build/artifacts
-
-    - name: Unpack artifact
-      run: |
-        mkdir -p build/artifacts/${{ matrix.architecture }}_${{ matrix.build_type }}
-        tar -xzf build/artifacts/gdb-static-${{ matrix.build_type }}-${{ matrix.architecture }}.tar.gz -C build/artifacts/${{ matrix.architecture }}_${{ matrix.build_type }}
-
-    - name: Run tests
-      run: make test-${{ matrix.architecture }}-${{ matrix.build_type }}
-
   release:
-    needs: test
+    needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -118,4 +79,3 @@ jobs:
           - Slim releases contain all of the base features.
           - Full releases also contain python & cross-architecture debugging support.
           Please note that full release binaries are bigger.
-

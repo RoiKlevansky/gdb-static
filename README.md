@@ -70,27 +70,27 @@ We provide two types of builds:
    * Cross-architecture debugging. <br />
    Note that in order to enable cross-architecture debugging, we have to disable the simulator feature, since not all targets have a simulator.
 
-Slim builds are approximately ~10MB. Full builds are approximately ~70MB. <br />
-You can edit the full_build_conf.sh file to disable full build exclusive features. 
+Slim builds are approximately ~10MB. Full builds are approximately ~70MB.
 
 ## Development
 
-> [!NOTE]
-> Before building, make sure to initialize & sync the git submodules.
-
-Alternatively, you can build `gdb-static` from source. To do so, follow the instructions below:
+`gdb-static` is built with [Nix](https://nixos.org). There is no Docker and no
+`make` — everything is derived from `flake.nix`, which cross-compiles fully
+static musl binaries for every supported architecture.
 
 <details open>
 <summary>
 Pre-requisites
 </summary> <br />
-To be able to build `gdb-static`, you will need the following tools installed on your machine:
 
-###
-
-- Docker
-- Docker buildx
+- [Nix](https://nixos.org/download) with flakes enabled
+  (`experimental-features = nix-command flakes`)
 - Git
+
+> [!NOTE]
+> The flake consumes the forks as git submodules, so builds must pass
+> `?submodules=1`. Make sure the submodules are initialized & synced first
+> (`git submodule update --init --recursive`).
 </details>
 
 <details open>
@@ -98,37 +98,41 @@ To be able to build `gdb-static`, you will need the following tools installed on
 Building for a specific architecture
 </summary> <br />
 
-To build `gdb-static` for a specific architecture, run the following command:
-
 ```bash
-make build-<ARCH>-[slim/full]
+nix build '.?submodules=1#gdb-static-<ARCH>-<slim|full>'
 ```
 
-Where `<ARCH>` is the architecture you want to build for, and `slim/full` determines the build type (see [here](#build-types)).
+Where `<ARCH>` is one of `x86_64`, `aarch64`, `arm`, `powerpc`, `mips`,
+`mipsel`, and `slim`/`full` is the build type (see [here](#build-types)).
+The executables land in `result/bin/` (`gdb`, `gdbserver`, and the binutils
+tools).
 
-The resulting binary will be placed in the `build/artifacts/` directory:
+</details>
+
+<details open>
+<summary>
+Building everything / running the tests
+</summary> <br />
 
 ```bash
-build/
-└── artifacts/
-    └── <ARCH>/
-        └── ...
+# Build every artifact (6 arches × {slim, full}) and run the pytest suite
+# for each under qemu-user:
+nix flake check '.?submodules=1'
 ```
 
 </details>
 
 <details open>
 <summary>
-Building for all architectures
+Binary cache
 </summary> <br />
 
-To build `gdb-static` for all supported architectures, run the following command:
-
-```bash
-make build
-```
-
-The resulting binary will be placed in the `build/artifacts/` directory.
+The cross toolchains (gcc + musl per arch) are not in cache.nixos.org, so a
+cold build compiles them from source. CI and contributors fetch prebuilt
+toolchains from the project's [Cachix](https://cachix.org) cache instead — the
+substituter is declared in the flake's `nixConfig`, so `nix build` uses it
+automatically once you accept the flake config (`--accept-flake-config`, or add
+yourself to `trusted-users` in `nix.conf`).
 
 </details>
 
@@ -137,17 +141,16 @@ The resulting binary will be placed in the `build/artifacts/` directory.
 Adding a custom architecture
 </summary> <br />
 
-Adding a new architecture to the build system is straightforward. Follow these steps:
+Add an entry to the `archs` table in `flake.nix` with:
 
-- **Add a cross compiler**: <br />
-Add a musl-based compiler to the `ARCHS` dictionary in `src/docker_utils/download_musl_toolchains.py`. You can find musl-based compilers [here](https://more.musl.cc/). <br />
-If a musl-based compiler is not available for your architecture, you can instead install a compiler via `apt` in the Dockerfile. However, using a musl-based toolchain is highly recommended.
-- **Update the Makefile**: <br />
-Add the new architecture to the `ARCHS` variable in the Makefile.
-- **Modify `build.sh`**: <br />
-Locate the `set_compilation_variables` function in `build.sh`.
-  - Add the new architecture to the `supported_archs` variable (in the same way as in the Makefile).
-  - Add a new `if` branch to check for the new architecture, and within it, export the appropriate `HOST` variable using the compiler's target triple.
+- `crossSystem` — the musl target triple (e.g. `aarch64-unknown-linux-musl`;
+  set `gcc.float = "soft"` for soft-float targets like mips).
+- `bfd` — the `--enable-targets` name used for full cross-debug builds.
+- `testCC` / `qemu` — the compiler and emulator names the test suite expects
+  (see `COMPILERS` / `EMULATORS` in `src/tests/misc.py`).
+
+The `slim`, `full`, `cpython-static`, and `checks` outputs are generated over
+that table automatically.
 
 </details>
 
