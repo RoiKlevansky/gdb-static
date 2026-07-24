@@ -3,7 +3,9 @@ name: gdb-static-pipeline
 on:
   pull_request:
     branches:
-      - '*'
+      # '**' rather than '*': a single star does not match '/', so PRs targeting
+      # a nested branch (feature/..., hotfix/...) would silently get no CI.
+      - '**'
   push:
     tags:
       - 'v*'
