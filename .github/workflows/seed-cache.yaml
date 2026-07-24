@@ -1,0 +1,74 @@
+name: seed-nix-cache
+
+# Populates the GitHub Actions cache with the Nix store for every architecture,
+# so the PR pipeline restores prebuilt cross toolchains instead of compiling
+# gcc + musl from source. This replaces the Cachix substituter: no external
+# account, no secrets.
+#
+# Seeding runs on the default branch on purpose. A run may only restore caches
+# scoped to its own ref, its PR base branch, or the default branch — a cache
+# written from a topic branch would be invisible to every other PR.
+#
+# Only arm, powerpc, mips and mipsel really need this; x86_64 and aarch64 musl
+# toolchains are already on cache.nixos.org. They are seeded anyway so the
+# matrix stays uniform and a nixpkgs bump can't silently regress coverage.
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.gitmodules'
+      - '.github/workflows/seed-cache.yaml'
+  # GitHub evicts caches untouched for 7 days. Refresh before that happens.
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: seed-nix-cache-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seed:
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: ["x86_64", "arm", "aarch64", "powerpc", "mips", "mipsel"]
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - uses: cachix/install-nix-action@v30
+      with:
+        extra_nix_config: |
+          experimental-features = nix-command flakes
+          accept-flake-config = true
+
+    # Restores first (a no-op on a cold cache), then saves the whole /nix store
+    # in the post-job phase. No `gc-max-store-size` here: the cross toolchain is
+    # a build-time dependency, so it is not reachable from the `result-*` gc
+    # roots and a store GC would delete exactly what we are trying to cache.
+    - uses: nix-community/cache-nix-action@v7
+      with:
+        primary-key: nix-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('flake.nix', 'flake.lock') }}
+        # Drop superseded generations so the 10 GB repo quota isn't spent on
+        # stale toolchains from older flake.lock revisions.
+        purge: true
+        purge-prefixes: nix-${{ runner.os }}-${{ matrix.architecture }}-
+        purge-created: 0
+        purge-primary-key: never
+
+    - name: Build
+      run: |
+        for build_type in slim full; do
+          nix build -L -o "result-$build_type" \
+            ".?submodules=1#gdb-static-${{ matrix.architecture }}-$build_type"
+
+          nix build -L -o "result-check-$build_type" \
+            ".?submodules=1#checks.x86_64-linux.gdb-static-${{ matrix.architecture }}-$build_type"
+        done
