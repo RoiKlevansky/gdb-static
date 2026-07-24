@@ -8,3 +8,5 @@ build/
 # Temporary python files
 __pycache__/
 *.py[cod]
+result
+result-*
