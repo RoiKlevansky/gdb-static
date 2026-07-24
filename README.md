@@ -127,12 +127,17 @@ nix flake check '.?submodules=1'
 Binary cache
 </summary> <br />
 
-The cross toolchains (gcc + musl per arch) are not in cache.nixos.org, so a
-cold build compiles them from source. CI and contributors fetch prebuilt
-toolchains from the project's [Cachix](https://cachix.org) cache instead — the
-substituter is declared in the flake's `nixConfig`, so `nix build` uses it
-automatically once you accept the flake config (`--accept-flake-config`, or add
-yourself to `trusted-users` in `nix.conf`).
+The `arm`, `powerpc`, `mips` and `mipsel` cross toolchains (gcc + musl) are not
+in cache.nixos.org, so a cold build compiles them from source. `x86_64` and
+`aarch64` are cached upstream and download as normal.
+
+CI avoids the rebuild with the GitHub Actions cache: `seed-cache.yaml` builds
+every architecture on `develop` and saves the Nix store per arch, and the PR
+pipeline restores it read-only. No account, no secrets, nothing to configure.
+
+That cache is internal to CI — there is no public substituter for this project,
+so a local first build of the exotic architectures does pay the toolchain cost
+once. It is then in your own `/nix/store` and never rebuilds.
 
 </details>
 

@@ -1,15 +1,11 @@
 {
   description = "gdb-static — statically-linked, musl, cross-arch GDB builds (Nix port)";
 
-  # Pull prebuilt cross toolchains + artifacts from the project's Cachix cache so
-  # CI runners (and clones) fetch instead of rebuilding gcc/musl from source.
-  # See [[ci-cache-cachix]]. Seeded via `cachix watch-exec gdb-static -- nix build`.
-  nixConfig = {
-    extra-substituters = [ "https://gdb-static.cachix.org" ];
-    extra-trusted-public-keys = [
-      "gdb-static.cachix.org-1:p9zgCSvXoSJM6v5j6BGONQ2ZI+5Mx5s5Jd0gJz7iXn0="
-    ];
-  };
+  # No extra substituter is declared. CI restores the cross toolchains from the
+  # GitHub Actions cache (.github/workflows/seed-cache.yaml) rather than from a
+  # hosted binary cache, so there is nothing for a clone to opt into: a local
+  # cold build compiles gcc + musl for arm/powerpc/mips from source. x86_64 and
+  # aarch64 musl static toolchains come from cache.nixos.org as usual.
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";

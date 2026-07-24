@@ -10,9 +10,9 @@ on:
     tags:
       - 'v*'
 
-# Requires repo secret CACHIX_AUTH_TOKEN (a write token for the "gdb-static"
-# Cachix cache). The first run populates the cache with the cross toolchains;
-# every later run fetches them instead of rebuilding gcc/musl from source.
+# No secrets required. The Nix store is restored from the GitHub Actions cache
+# populated by seed-cache.yaml on develop, so runners fetch the cross
+# toolchains instead of rebuilding gcc/musl from source.
 jobs:
   build:
     strategy:
@@ -33,10 +33,15 @@ jobs:
           experimental-features = nix-command flakes
           accept-flake-config = true
 
-    - uses: cachix/cachix-action@v15
+    # Restore only. seed-cache.yaml owns the writes: if all 12 matrix jobs
+    # saved their own ~1 GB store, one run would exhaust the 10 GB repo quota
+    # and evict the toolchains it just wrote. The prefix fallback keeps builds
+    # warm when flake.lock moves before the seed job has caught up.
+    - uses: nix-community/cache-nix-action@v7
       with:
-        name: gdb-static
-        authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+        primary-key: nix-${{ runner.os }}-${{ matrix.architecture }}-${{ hashFiles('flake.nix', 'flake.lock') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-${{ matrix.architecture }}-
+        save: false
 
     - name: Build
       run: |
